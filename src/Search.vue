@@ -164,24 +164,46 @@ const searchPois = async(item)=>{
     let id = item.id;
     const placeSearch = new AMap.PlaceSearch()
     placeSearch.getDetails(id, function (status, result) {
-        console.log(result);
-      //查询成功时，result 即为对应的 POI 详情
-      poisResult.value = result.poiList.pois;
-      inputValue.value = result.poiList.pois[0].name;
-      //将适口移动到poi的位置 同时添加点标记
-      let marker = new AMap.Marker({
-        position: new AMap.LngLat(
-          result.poiList.pois[0].location.lng,
-          result.poiList.pois[0].location.lat
-        ), //经纬度对象，也可以是经纬度构成的一维数组[116.39, 39.9]
-        title: result.poiList.pois[0].name,
-      });
-      markers.push(marker);
+        if(status === 'complete'){
+            //查询成功时，result 即为对应的 POI 详情
+            poisResult.value = result.poiList.pois;
+            inputValue.value = result.poiList.pois[0].name;
+            //将适口移动到poi的位置 同时添加点标记
+            let marker = new AMap.Marker({
+                position: new AMap.LngLat(
+                result.poiList.pois[0].location.lng,
+                result.poiList.pois[0].location.lat
+                ), //经纬度对象，也可以是经纬度构成的一维数组[116.39, 39.9]
+                title: result.poiList.pois[0].name,
+            });
+            markers.push(marker);
 
-      const map = mapStore.map;
-      console.log('当前点标记：',markers);
-      map.add(marker);
-      map.setFitView();
+            const map = mapStore.map;
+            console.log('当前点标记：',markers);
+            map.add(marker);
+            map.setFitView();
+        }else if(status === 'error'){
+            const name = item.name;
+            const geocoder = new AMap.Geocoder();
+            geocoder.getLocation(name, function (status, result) {
+                if(status === 'complete'){
+                    const city = result.geocodes[0]
+                    // console.log('当前城市：', city);
+                    const { lng, lat } = city.location
+                    console.log(lng, lat);
+                    const marker = new AMap.Marker({
+                        position: new AMap.LngLat(lng, lat),
+                        title: name,
+                    });
+                    markers.push(marker);
+                    const map = mapStore.map;
+                    // console.log('当前点标记：',markers);
+                    map.add(marker);
+                    map.setFitView();
+                }
+            })
+        }
+      
     });
 }
 
