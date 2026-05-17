@@ -4,31 +4,53 @@
 
 <script setup>
 import AMapLoader from "@amap/amap-jsapi-loader";
-import { onMounted, reactive, ref, watch,onUnmounted } from "vue";
+import { onMounted, ref, onUnmounted } from "vue";
 import { useMapStore } from "./stores/map";
 
-let map = reactive({})
+let map = null
 const mapStore = useMapStore();
 
+// 地图移动结束统一更新状态 + 获取城市
 const mapChange = () => {
-    if(map){
-        const zoom = map.getZoom()
-        mapStore.setZoom(zoom)
-        const center = map.getCenter()
-        const centerArr = [center.lng, center.lat]
-        mapStore.setCenter(centerArr)
-        // console.log(mapStore.center, mapStore.zoom);
-    }
+    // console.log('触发了移动事件');
+    if(!map) return
+    // 更新缩放、中心点到pinia
+    const zoom = map.getZoom()
+    mapStore.setZoom(zoom)
+    const center = map.getCenter()
+    const centerArr = [center.lng, center.lat]
+    mapStore.setCenter(centerArr)
+
+    // console.log('此时的中心坐标：', mapStore.center);
+
+    const AMap = mapStore.AMap
+    if(!AMap) return
+    const geocoder = new AMap.Geocoder()
+    geocoder.getAddress(centerArr, (status, result) => {
+        if (status === "complete" && result.info === "OK") {
+            if(zoom > 8){
+                let city = result.regeocode.addressComponent.city || result.regeocode.addressComponent.province
+                mapStore.setCity(city)
+                // console.log('此时的城市：', mapStore.city);
+            }else if(zoom > 4){
+                let city = result.regeocode.addressComponent.province;
+                mapStore.setCity(city)
+                // console.log('此时的城市：', mapStore.city);
+            }else{
+                mapStore.setCity('全国')
+                // console.log('此时的城市：', mapStore.city);
+            }
+        }
+    })
 }
 
 onMounted(() => {
-    console.log(mapStore);
     window._AMapSecurityConfig = {
       securityJsCode: "2a10fc411bb33304a8f2b072a935706d",
     };
     AMapLoader.load({
-      key: "1bdcfd4584f4b2b2d0c57ba098afdb93", // 申请好的Web端开发者Key
-      version: "2.0", // 指定要加载的 JSAPI 的版本，缺省时默认为 1.4.15
+      key: "1bdcfd4584f4b2b2d0c57ba098afdb93",
+      version: "2.0",
       plugins: [
         "AMap.Scale",
         "AMap.ToolBar",
@@ -39,10 +61,11 @@ onMounted(() => {
         "AMap.PlaceSearch",
         "AMap.Driving",
         'AMap.MoveAnimation',
-      ], //需要使用的的插件列表，如比例尺'AMap.Scale'，支持添加多个如：['...','...']
+      ],
     })
       .then((AMap) => {
-        //ip定位搜索工具实例
+        // 存入全局AMap对象
+        mapStore.setAMap(AMap)
         var citySearch = new AMap.CitySearch();
         map =new AMap.Map("map", {
             viewMode: '3D',
@@ -58,64 +81,35 @@ onMounted(() => {
         map.addControl(toolBar)
         const controlBar = new AMap.ControlBar({
             position:{
-                right:'-10px',
-                bottom:'80px'
+                top:'10px',
+                right:'10px'
             }
         })
         map.addControl(controlBar)
+
         citySearch.getLocalCity((status, result) => {
             if (status === "complete" && result.info === "OK") {
-                let localCity = result.province
-                mapStore.setCity(localCity)
+                mapStore.setCity(result.province)
                 const { lng, lat } = result.geocodes[0].location;
                 mapStore.setCenter([lng, lat])
             }else {
-                console.log('浏览器定位ip地址失败,默认加载长沙');    
+                console.log('IP定位失败,默认长沙');    
             }
         })
+        mapChange()
 
-        map.on('moveend', () => {
-            // console.log('触发地图平移时的事件');
-            mapChange()
-        });
+        // 地图移动结束触发
+        map.on('moveend', mapChange);
       })
       .catch((e) => {
-        console.log(e);
+        console.log('地图加载错误',e);
       });
 })
-// watch(
-//   () => [mapStore.center, mapStore.zoom],
-//   ([newCenter, newZoom]) => {
-//     // 确保地图实例已存在
-//     if (map?.setCenter) {
-//       map.setCenter(newCenter)
-//       map.setZoom(newZoom)
-//     }
-//   },
-//   { deep: true } // 监听数组内部变化
-// )
 
-watch(mapStore.center, (newCenter) => {
-    let zoom = map.getZoom()
-    const geocoder = new AMap.Geocoder()
-    geocoder.getAddress(newCenter, (status, result) => {
-        if (status === "complete" && result.info === "OK") {
-            if(zoom >8){
-                let city=
-                result.regeocode.addressComponent.city ||
-                result.regeocode.addressComponent.province ||
-                mapStore.setCity(city)
-            }else if(zoom >4){
-                let city= result.regeocode.addressComponent.province;
-                mapStore.setCity(city)
-            }else{
-                mapStore.setCity('全国')
-            }
-        }
-    })
-})
+// 正确销毁
 onUnmounted(() => {
-  map.destory()
+  if(map) map.destroy()
+  map = null
 })
 </script>
 
